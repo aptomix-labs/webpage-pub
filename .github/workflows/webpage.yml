@@ -1,0 +1,84 @@
+name: Build and deploy aptomix.com webpage
+
+on:
+  repository_dispatch:
+    types: [source-updated]
+  workflow_dispatch:   # allows running it manually from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time; don't cancel a deployment that is already running.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      HUGO_VERSION: 0.168.0
+      HUGO_ENVIRONMENT: production
+      HUGO_CACHEDIR: ${{ github.workspace }}/.hugo_cache
+      TZ: Europe/Zurich
+
+    steps:
+      - name: Install Hugo (extended)
+        run: |
+          wget -q -O ${{ runner.temp }}/hugo.deb \
+            https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb
+          sudo dpkg -i ${{ runner.temp }}/hugo.deb
+          hugo version
+
+      - name: Checkout webpage source
+        uses: actions/checkout@v4
+        with:
+          repository: aptomix-labs/webpage
+          ref: master
+          token: ${{ secrets.WEBPAGE_DEPLOY_TOKEN }}
+          path: source
+          submodules: recursive
+          fetch-depth: 0   # full history, so .Lastmod can use Git dates if enabled
+
+      - name: Set up GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Restore Hugo cache (processed images)
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HUGO_CACHEDIR }}
+          key: hugo-${{ env.HUGO_VERSION }}-${{ hashFiles('assets/images/**') }}
+          restore-keys: hugo-${{ env.HUGO_VERSION }}-
+
+      - name: Build with Hugo
+        working-directory: source
+        run: |
+          hugo --gc --minify \
+            --baseURL "${{ steps.pages.outputs.base_url }}/"
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: source/public
+
+  deploy:
+    needs: build
+
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
