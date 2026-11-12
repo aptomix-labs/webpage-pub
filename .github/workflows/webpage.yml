@@ -1,9 +1,9 @@
 name: Build and deploy aptomix.com webpage
 
 on:
-  repository_dispatch:
+  repository_dispatch:  # listen for triggers from the source repo
     types: [source-updated]
-  workflow_dispatch:   # allows running it manually from the Actions tab
+  workflow_dispatch:    # allows running it manually from the Actions tab
 
 permissions:
   contents: read
